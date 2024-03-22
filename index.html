@@ -29,6 +29,16 @@
         top: 0;
         left: 0;
       }
+      #imageInput {
+        position: fixed;
+        top: 0;
+        left: 250;
+      }
+      #vision_button_image {
+        position: fixed;
+        top: 0;
+        left: 100;
+      }
     </style>
   </head>
   <body>
@@ -36,6 +46,8 @@
 
     <video autoplay="true" id="videoElement"></video>
     <button id="vision_button">Analyze</button>
+    <input id="imageInput" type="file" accept="images/*" />
+    <button id="vision_button_image">Analyze Image</button>
     <div id="results"></div>
 
     <script>
@@ -52,24 +64,46 @@
           })
       }
 
-      // We only get to work when the vision button is clicked
+      // We only get to work when the vision button is clicked for video
       document
         .querySelector("#vision_button")
         .addEventListener("click", (evt) => {
-          // extract image as base64, scale it down to reduce data transfer speed
-          var scale = 0.25
-          var canvas = document.createElement("canvas")
+          captureAndAnalyze("video")
+        })
+
+      // We only get to work when the vision button is clicked for image
+      document
+        .querySelector("#vision_button_image")
+        .addEventListener("click", (evt) => {
+          captureAndAnalyze("image")
+        })
+
+      // Function to capture either video frame or image and analyze
+      function captureAndAnalyze(type) {
+        var canvas = document.createElement("canvas")
+        var context = canvas.getContext("2d")
+        var scale = 0.25
+
+        if (type === "video") {
           canvas.width = video.videoWidth * scale
           canvas.height = video.videoHeight * scale
-          canvas
-            .getContext("2d")
-            .drawImage(video, 0, 0, canvas.width, canvas.height)
+          context.drawImage(video, 0, 0, canvas.width, canvas.height)
+          processImage(canvas.toDataURL())
+        } else if (type === "image") {
+          var imageInput = document.getElementById("imageInput")
+          var image = new Image()
+          image.onload = function () {
+            console.log("Image loaded successfully:", image.src)
+            canvas.width = image.width * scale
+            canvas.height = image.height * scale
+            context.drawImage(image, 0, 0, canvas.width, canvas.height)
+            processImage(canvas.toDataURL())
+          }
+          image.src = URL.createObjectURL(imageInput.files[0])
+        }
 
-          // dataUrl contains base64 version of image
-          var dataUrl = canvas.toDataURL()
-
-          // Send image to google to analyze
-          // Documentation of the annotate feature: https://cloud.google.com/vision/docs/reference/rest/v1/images/annotate
+        var dataUrl = canvas.toDataURL()
+        function processImage(dataUrl) {
           fetch(
             "https://vision.googleapis.com/v1/images:annotate?key=AIzaSyAbhB48NIl4Us5A5M0QcQqIKp-5OqgUksk",
             {
@@ -81,10 +115,10 @@
                 requests: [
                   {
                     features: {
-                      type: "LABEL_DETECTION",
+                      type: "OBJECT_LOCALIZATION",
+                      maxResults: 10,
                     },
                     image: {
-                      // have to extract only the image data from dataURL
                       content: dataUrl.substring(
                         "data:image/png;base64,".length
                       ),
@@ -97,24 +131,36 @@
             .then((resp) => {
               return resp.json()
             })
+
             .then((json) => {
               // Simply output the response
               console.log(json)
               results.innerHTML = ""
-              json.responses[0].labelAnnotations.forEach((annotation) => {
-                let description = document.createElement("span")
-                let score = document.createElement("span")
+              if (
+                json.responses &&
+                json.responses.length > 0 &&
+                json.responses[0].localizedObjectAnnotations
+              ) {
+                json.responses[0].localizedObjectAnnotations.forEach(
+                  (annotation) => {
+                    let description = document.createElement("span")
+                    let score = document.createElement("span")
 
-                let div = document.createElement("div")
-                description.innerText = annotation.description
-                score.innerText = annotation.score
+                    let div = document.createElement("div")
+                    description.innerText = annotation.name
+                    score.innerText = annotation.score
 
-                div.append(description, score)
+                    div.append(description, score)
 
-                results.append(div)
-              })
+                    results.append(div)
+                  }
+                )
+              } else {
+                results.innerText = "No objects detected in the image."
+              }
             })
-        })
+        }
+      }
     </script>
   </body>
 </html>
