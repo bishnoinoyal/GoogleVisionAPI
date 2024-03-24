@@ -2,53 +2,80 @@
   <head>
     <style>
       #results {
-        position: fixed;
-        top: 50px;
-        left: 10px;
-        color: white;
+        color: black;
+        width: auto;
+        align-items: left;
       }
-
       #results span {
-        margin: 5px 5px;
+        border-bottom: 1px solid grey;
       }
-
       video {
-        position: fixed;
-        top: 0;
-        left: 0;
+        border: 2px solid grey;
+        padding: 3px;
       }
-
-      h1 {
-        position: fixed;
-        bottom: 0;
-        left: 0;
+      #vision_button{
+        margin-top: 10px;
+        width: auto;
       }
-
-      button {
-        position: fixed;
-        top: 0;
-        left: 0;
+      #container{
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-content: center;
+        width: 100%;
       }
-      #imageInput {
-        position: fixed;
-        top: 0;
-        left: 250;
+      .imageContainer{
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        width: 100%;
       }
-      #vision_button_image {
-        position: fixed;
-        top: 0;
-        left: 100;
+      .main{
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-content: center;
+        width: 50%;
+        margin: auto;
+        gap: 20px;
+      }
+      
+      .videoContainer{
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-content: center;
+        width: 100%;
+        margin: auto;
       }
     </style>
   </head>
   <body>
     <!-- Basic Cloud Vision (Google) Demo -->
+<div id="container">
+  <div class="main">
+    <div class="videoContainer">
+      <video autoplay="true" id="videoElement"></video>
+      <button id="vision_button">Analyze Video</button>
+    </div>
+    <div>
+      <label for="options">Choose an option:</label>
+      <select id="options">
+        <option value="DOCUMENT_TEXT_DETECTION">Text Detection</option>
+        <option value="logoDetection">Logo Detection</option>
+        <option value="OBJECT_LOCALIZATION">Object Detection</option>
+      </select>
+    </div>
+    <div class="imageContainer">
+      <input id="imageInput" type="file" accept="images/*" />
+      <button id="vision_button_image">Analyze Image</button>
+    </div>
+    <div id="results">
 
-    <video autoplay="true" id="videoElement"></video>
-    <button id="vision_button">Analyze</button>
-    <input id="imageInput" type="file" accept="images/*" />
-    <button id="vision_button_image">Analyze Image</button>
-    <div id="results"></div>
+    </div>
+  </div>
+
+
 
     <script>
       // Access camera
@@ -64,46 +91,73 @@
           })
       }
 
+      // We are providing options to the user to select what results they want
+      var feature;
+      var selectedOption;
+      function setFeature(){
+        var optionsElement = document.getElementById("options");
+        selectedOption = optionsElement.options[optionsElement.selectedIndex];
+        if (selectedOption.value == "DOCUMENT_TEXT_DETECTION") {
+        var feature = {
+          type: "DOCUMENT_TEXT_DETECTION",
+          maxResults: 10,
+        }
+      }
+      else if (selectedOption.value == "OBJECT_LOCALIZATION") {
+        var feature = {
+          type: "OBJECT_LOCALIZATION",
+          maxResults: 10,
+        }
+      }
+      return feature;
+    }
+    
+      document.getElementById("options").addEventListener("change", function() {
+      feature = setFeature();
+      });
+    
       // We only get to work when the vision button is clicked for video
       document
-        .querySelector("#vision_button")
-        .addEventListener("click", (evt) => {
-          captureAndAnalyze("video")
-        })
-
+      .querySelector("#vision_button")
+      .addEventListener("click", (evt) => {
+        captureAndAnalyze("video")
+      })
+      
       // We only get to work when the vision button is clicked for image
       document
-        .querySelector("#vision_button_image")
-        .addEventListener("click", (evt) => {
-          captureAndAnalyze("image")
-        })
-
+      .querySelector("#vision_button_image")
+      .addEventListener("click", (evt) => {
+        captureAndAnalyze("image")
+      })
+      
       // Function to capture either video frame or image and analyze
       function captureAndAnalyze(type) {
         var canvas = document.createElement("canvas")
         var context = canvas.getContext("2d")
-        var scale = 0.25
+        var scale = 0.50
 
+        var dataUrl = canvas.toDataURL()
         if (type === "video") {
-          canvas.width = video.videoWidth * scale
-          canvas.height = video.videoHeight * scale
-          context.drawImage(video, 0, 0, canvas.width, canvas.height)
-          processImage(canvas.toDataURL())
+         context.drawImage(video, 0, 0, canvas.width, canvas.height);
+         console.log(dataUrl)
+                 feature = setFeature();
+
+          processImage(canvas.toDataURL(), feature)
+
         } else if (type === "image") {
           var imageInput = document.getElementById("imageInput")
           var image = new Image()
           image.onload = function () {
-            console.log("Image loaded successfully:", image.src)
-            canvas.width = image.width * scale
-            canvas.height = image.height * scale
-            context.drawImage(image, 0, 0, canvas.width, canvas.height)
-            processImage(canvas.toDataURL())
+            context.drawImage(image, 0, 0, canvas.height, canvas.width);
+                    feature = setFeature();
+
+            processImage(canvas.toDataURL(), feature)
           }
           image.src = URL.createObjectURL(imageInput.files[0])
         }
+    }
 
-        var dataUrl = canvas.toDataURL()
-        function processImage(dataUrl) {
+      function processImage(dataUrl, feature) {
           fetch(
             "https://vision.googleapis.com/v1/images:annotate?key=AIzaSyAbhB48NIl4Us5A5M0QcQqIKp-5OqgUksk",
             {
@@ -114,9 +168,9 @@
               body: JSON.stringify({
                 requests: [
                   {
-                    features: {
-                      type: "OBJECT_LOCALIZATION",
-                      maxResults: 10,
+                    features: [feature],
+                    imageContext: {
+                      languageHints: ["en-t-i0-handwrit"],
                     },
                     image: {
                       content: dataUrl.substring(
@@ -133,33 +187,33 @@
             })
 
             .then((json) => {
-              // Simply output the response
               console.log(json)
+              let res = json
               results.innerHTML = ""
-              if (
-                json.responses &&
-                json.responses.length > 0 &&
-                json.responses[0].localizedObjectAnnotations
-              ) {
-                json.responses[0].localizedObjectAnnotations.forEach(
-                  (annotation) => {
-                    let description = document.createElement("span")
-                    let score = document.createElement("span")
+              let div = document.createElement("div")
+              console.log(selectedOption.value)
+              if (selectedOption.value == "DOCUMENT_TEXT_DETECTION") {                  
+                let text = document.createElement("span")
+                console.log(res.responses[0].fullTextAnnotation.text)
+                text.textContent = res.responses[0].fullTextAnnotation.text
+                  div.append(text)
+                results.append(div)
+                }
+                else if (selectedOption.value == "OBJECT_LOCALIZATION") {
+                  res.responses[0].localizedObjectAnnotations.forEach(element => {
+                    let text = document.createElement("span")
+                    console.log(element.name);
+                    text.textContent = element.name
+                    div.append(text)
+                    let lineBreak = document.createElement("br")
+                    div.append(lineBreak)
+                results.append(div)
+                  });
 
-                    let div = document.createElement("div")
-                    description.innerText = annotation.name
-
-                    div.append(description)
-
-                    results.append(div)
-                  }
-                )
-              } else {
-                results.innerText = "No objects detected in the image."
-              }
+                }
             })
         }
-      }
+      
     </script>
   </body>
 </html>
